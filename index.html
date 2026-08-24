@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f2f0eb">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="吸音板計價">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
 <title>聚酯纖維吸音板｜報價與追加｜三川工方</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -284,6 +287,7 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
   <div class="modes">
     <button class="mode on" data-m="q">報價試算</button>
     <button class="mode" data-m="v">現場追加</button>
+    <button class="mode" data-m="s">勘場確認</button>
   </div>
 
   <section>
@@ -326,7 +330,8 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
       <div class="lab"><b>不含項目</b><i></i><s>Exclusions</s></div>
       <div class="togs excs" id="excs"></div>
       <input class="exc-note" type="text" id="excNote" placeholder="其他不含項目（自行補充）">
-      <p class="hint">選取者會列印於報價單，明確排除承攬範圍。若該項本次確實包含，請取消選取。</p>
+      <button class="addrow" id="mkCheck" style="margin-top:10px">產生轉報檢核單（給合富對業主用）</button>
+      <p class="hint">選取者會列印於報價單，明確排除承攬範圍。若該項本次確實包含，請取消選取。檢核單不帶金額，供合富向業主報價時逐項確認負責方，避免兩邊都漏算。</p>
     </section>
 
     <section>
@@ -371,6 +376,16 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
     </section>
   </div>
 
+  <!-- ============ 勘場模式 ============ -->
+  <div id="modeS" hidden>
+    <section>
+      <div class="lab"><b>現場條件</b><i></i><s>Site Survey</s></div>
+      <div class="fields" id="survey"></div>
+      <input type="text" id="srvMemo" style="margin-top:10px" placeholder="其他備註（動線、特殊狀況）">
+      <p class="hint">報價前逐項確認。填妥後產出勘場確認單傳給合富 —— 上列條件為報價依據，與實際不符時報價得重新調整。</p>
+    </section>
+  </div>
+
   <button class="reset" id="reset">清空重算</button>
 
   <footer>
@@ -383,7 +398,7 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
   <div class="in">
     <div class="l">
       <span id="barL">代工費（未稅）</span>
-      <b><i>NT$</i><span id="barV">0</span></b>
+      <b><i id="barCur">NT$</i><span id="barV">0</span></b>
       <u id="barN">請輸入尺寸</u>
     </div>
     <div class="acts">
@@ -446,6 +461,17 @@ const SITE=[
 const EXC=["基層整平／壁面修補","舊有面材拆除","木作底板施作","電路移位與配線",
  "燈具、五金供應","油漆修補","窗簾盒、簾軌","圖面未標示之其他項目"];
 const REASON=["圖面未標示","現場與圖不符","業主現場加做","前置作業未完成"];
+/* 勘場確認項目 */
+const SURV=[
+ {k:"height", q:"最高施工高度",     opts:["3M 以下","3M 以上（需搭架，+20%）","挑高／樓梯間（另議）"]},
+ {k:"lift",   q:"電梯／貨梯",       opts:["可使用","不可使用（人工搬運另計）","無電梯（人工搬運另計）"]},
+ {k:"base",   q:"底材狀況",         opts:["矽酸鈣板","夾板","水泥粉光","其他（見備註）"]},
+ {k:"plan",   q:"板件編號與排版圖", opts:["有","無（每面 +500）","待合富確認"]},
+ {k:"time",   q:"施工時段限制",     opts:["無","僅日間","需夜間／假日（另議）","分段進場（另議）"]},
+ {k:"trash",  q:"案場垃圾集中區",   opts:["有","無（餘料需即日運離）","待確認"]},
+ {k:"power",  q:"現場電源",         opts:["有","無（需自備）","待確認"]},
+ {k:"protect",q:"公共區保護",       opts:["發包單位處理","本方施作（另計）","待確認"]}
+];
 
 /* 追加單快速項目：由上表自動組出，價目永遠同步 */
 const PICKG=[
@@ -461,8 +487,9 @@ const money=n=>"NT$ "+nf0(n);
 const pad=n=>String(n).padStart(2,"0");
 
 /* ---------- 狀態 ---------- */
-let mode="q";
+let mode="q",sheetKind="quote";
 let faces=[],seq=0,lines=[],lseq=0;
+const srv={};SURV.forEach(f=>srv[f.k]="");
 const ex={},exOn={};EX.forEach(e=>{ex[e.k]=1;exOn[e.k]=false;});
 const pj={},pjOn={};PJ.forEach(e=>{pj[e.k]=e.free?0:1;pjOn[e.k]=false;});
 const excOn=EXC.map(()=>true);
@@ -587,6 +614,17 @@ function excList(){
 }
 
 /* ---------- 追加單 ---------- */
+function renderSurvey(){
+  const box=document.getElementById("survey");
+  box.innerHTML=SURV.map(f=>
+    '<div class="f"><label>'+f.q+'</label><div class="in" style="width:200px">'+
+    '<select data-k="'+f.k+'"><option value="">請選擇</option>'+
+    f.opts.map(o=>'<option'+(srv[f.k]===o?" selected":"")+'>'+o+'</option>').join("")+
+    '</select></div></div>').join("");
+  box.querySelectorAll("select").forEach(s=>s.onchange=e=>{srv[e.target.dataset.k]=e.target.value;sync();});
+}
+const srvDone=()=>SURV.filter(f=>srv[f.k]).length;
+
 function renderReasons(){
   const r=document.getElementById("reasons");
   r.innerHTML=REASON.map((t,i)=>'<button class="tog'+(reasonOn[i]?" on":"")+'" data-i="'+i+'">'+t+'</button>').join("");
@@ -663,12 +701,18 @@ function sync(){
     vres.innerHTML=h;
   }
   if(mode==="q"){
+    document.getElementById("barCur").style.display="";
     document.getElementById("barV").textContent=nf0(s.grand);
     document.getElementById("barN").textContent=
       s.grand===0?"請輸入尺寸":(s.makeup?"已補至最低出工 "+money(R.minJob):s.chai+" 才　"+s.rows.length+" 面");
-  }else{
+  }else if(mode==="v"){
+    document.getElementById("barCur").style.display="";
     document.getElementById("barV").textContent=nf0(vt);
     document.getElementById("barN").textContent=lines.length?lines.length+" 項待確認":"請新增項目";
+  }else{
+    document.getElementById("barCur").style.display="none";
+    document.getElementById("barV").textContent=srvDone()+"／"+SURV.length;
+    document.getElementById("barN").textContent=srvDone()===SURV.length?"條件已確認，可產出勘場單":"逐項確認現場條件";
   }
 }
 
@@ -678,16 +722,59 @@ function setMode(m){
   document.querySelectorAll(".mode").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
   document.getElementById("modeQ").hidden=(m!=="q");
   document.getElementById("modeV").hidden=(m!=="v");
-  document.getElementById("hTitle").textContent=(m==="q")?"快速試算":"現場追加";
+  document.getElementById("modeS").hidden=(m!=="s");
+  document.getElementById("hTitle").textContent=(m==="q")?"快速試算":(m==="v")?"現場追加":"勘場確認";
   document.getElementById("hTag").textContent=(m==="q")
     ?"純施工工資　未稅　臺北市起算　材料由發包單位提供"
-    :"施作前確認　未經同意不予施作　未稅";
-  document.getElementById("barL").textContent=(m==="q")?"代工費（未稅）":"追加金額（未稅）";
-  document.getElementById("btnPreview").textContent=(m==="q")?"預覽報價單":"預覽追加單";
+    :(m==="v")?"施作前確認　未經同意不予施作　未稅"
+    :"報價前確認　上列條件為報價依據";
+  document.getElementById("barL").textContent=(m==="q")?"代工費（未稅）":(m==="v")?"追加金額（未稅）":"勘場確認";
+  document.getElementById("btnPreview").textContent=(m==="q")?"預覽報價單":(m==="v")?"預覽追加單":"預覽勘場單";
   document.getElementById("reset").textContent=(m==="q")?"清空重算":"清空重填";
   window.scrollTo(0,0);sync();
 }
 
+/* ---------- 勘場確認單 ---------- */
+function buildSurveySheet(){
+  const nm=document.getElementById("pjName").value.trim()||"—";
+  const ad=document.getElementById("pjAddr").value.trim()||"—";
+  const memo=document.getElementById("srvMemo").value.trim();
+  let h='<div class="h"><h2 class="lock"><span class="tt">勘場確認單<i class="sep"></i><em>報價依據</em></span></h2>'+
+   '<div class="rule"></div><div class="sign">三川工方</div>'+
+   '<span class="en">Site Survey Confirmation</span></div>'+
+   '<div class="meta"><span>案件</span><b>'+nm+'</b><span>地址</span><b>'+ad+'</b><span>日期</span><b>'+today()+'</b></div>'+
+   '<div class="sec">現場條件</div><table>';
+  SURV.forEach(f=>{h+='<tr><td>'+f.q+'</td><td class="r" style="color:var(--ink);font-size:13px">'+(srv[f.k]||"—　未確認")+'</td></tr>';});
+  h+='</table>';
+  if(memo)h+='<div class="sec">備註</div><div style="font-size:13px;line-height:1.8;color:var(--body)">'+memo+'</div>';
+  h+='<div class="warn2"><b>說明</b><br>'+
+   '一、本表所列現場條件為報價依據。<br>'+
+   '二、如現場實際狀況與上列不符，報價金額與工期得重新調整。<br>'+
+   '三、標示「另計」「另議」之項目不含於基本報價。</div>'+
+   '<div class="sign2"><div>發包單位確認</div><div>施工方　三川工方</div></div>';
+  return h;
+}
+/* ---------- 轉報檢核單 ---------- */
+function buildCheckSheet(){
+  const nm=document.getElementById("pjName").value.trim()||"—";
+  const ad=document.getElementById("pjAddr").value.trim()||"—";
+  const opt="□ 業主自理　□ 貴司發包　□ 需本方另行報價";
+  let h='<div class="h"><h2 class="lock"><span class="tt">轉報檢核單<i class="sep"></i><em>項目確認</em></span></h2>'+
+   '<div class="rule"></div><div class="sign">三川工方</div>'+
+   '<span class="en">Scope Checklist for Client Quotation</span></div>'+
+   '<div class="meta"><span>案件</span><b>'+nm+'</b><span>地址</span><b>'+ad+'</b><span>日期</span><b>'+today()+'</b></div>'+
+   '<div class="sec">項目與負責方</div><table>'+
+   '<tr><td>聚酯纖維吸音板施工</td><td class="r" style="color:var(--green);font-size:12.5px">三川工方（已含本報價）</td></tr>';
+  excList().forEach(t=>{h+='<tr><td>'+t+'</td><td class="r" style="font-size:11.5px;color:var(--body)">'+opt+'</td></tr>';});
+  h+='<tr><td>3M 以上搭架</td><td class="r" style="font-size:11.5px;color:var(--body)">'+opt+'</td></tr>'+
+   '<tr><td>餘料清運</td><td class="r" style="font-size:12.5px;color:var(--ink)">'+(disp.on?"已含本方報價":"□ 業主自理　□ 貴司處理")+'</td></tr>'+
+   '<tr><td>現場保護（電梯、地坪、公共區）</td><td class="r" style="font-size:11.5px;color:var(--body)">'+opt+'</td></tr></table>'+
+   '<div class="warn2"><b>用途說明</b><br>'+
+   '一、本表不含金額，供貴司向業主報價時逐項核對，避免項目遺漏。<br>'+
+   '二、各項負責方確認後，如需本方施作，將另行報價。<br>'+
+   '三、未列於本表且圖面未標示之項目，發現時以現場追加單另行確認。</div>';
+  return h;
+}
 /* ---------- 報價單 ---------- */
 function buildQuoteSheet(){
   const s=summary();
@@ -774,13 +861,17 @@ function buildVarSheet(){
   return h;
 }
 function buildSheet(){
-  document.getElementById("quote").innerHTML=(mode==="q")?buildQuoteSheet():buildVarSheet();
+  const q=document.getElementById("quote");
+  if(sheetKind==="quote")q.innerHTML=buildQuoteSheet();
+  else if(sheetKind==="var")q.innerHTML=buildVarSheet();
+  else if(sheetKind==="survey")q.innerHTML=buildSurveySheet();
+  else q.innerHTML=buildCheckSheet();
 }
 
 /* ---------- 純文字 ---------- */
 function sheetText(){
   const nm=document.getElementById("pjName").value.trim()||"—";
-  if(mode==="q"){
+  if(sheetKind==="quote"){
     const s=summary();
     let t="【聚酯纖維吸音板代工報價】三川工方\n案件："+nm+"\n日期："+today()+"\n—————\n";
     s.rows.forEach(r=>{t+=fname(r.f)+"　"+r.c.chai+"才 × "+nf0(r.c.rate)+" ＝ "+money(r.c.total)+"\n";});
@@ -791,6 +882,24 @@ function sheetText(){
     t+="—————\n代工費（未稅）"+money(s.grand);
     const e2=excList();
     if(e2.length)t+="\n\n【本報價不含】"+e2.join("、")+"。上列如需施作須另行報價，未經確認前不予施作。";
+    return t;
+  }
+  if(sheetKind==="survey"){
+    const memo=document.getElementById("srvMemo").value.trim();
+    let t="【勘場確認單】三川工方\n案件："+nm+"\n日期："+today()+"\n—————\n";
+    SURV.forEach(f=>{t+=f.q+"："+(srv[f.k]||"未確認")+"\n";});
+    if(memo)t+="備註："+memo+"\n";
+    t+="—————\n※ 上列現場條件為報價依據，與實際不符時報價金額與工期得重新調整。";
+    return t;
+  }
+  if(sheetKind==="check"){
+    let t="【轉報檢核單】三川工方\n案件："+nm+"\n日期："+today()+"\n供貴司向業主報價時逐項核對\n—————\n";
+    t+="吸音板施工：三川工方（已含本報價）\n";
+    excList().forEach(x=>{t+=x+"：業主自理／貴司發包／需本方另行報價（請確認）\n";});
+    t+="3M 以上搭架：請確認\n";
+    t+="餘料清運："+(disp.on?"已含本方報價":"業主自理／貴司處理（請確認）")+"\n";
+    t+="現場保護（電梯、地坪）：請確認\n";
+    t+="—————\n※ 本表不帶金額；各項如需本方施作將另行報價。未列項目發現時以現場追加單確認。";
     return t;
   }
   const no=document.getElementById("vNo").value.trim()||"—";
@@ -811,7 +920,8 @@ const closeS=id=>{document.getElementById(id).hidden=true;document.body.style.ov
 const toPng=cb=>html2canvas(document.getElementById("quote"),{scale:2,backgroundColor:"#f2f0eb"}).then(cb).catch(()=>alert("圖片產生失敗，請再試一次"));
 const flash=(b,t)=>{const o=b.textContent;b.textContent=t;b.classList.add("done");setTimeout(()=>{b.textContent=o;b.classList.remove("done");},1400);};
 function share(){
-  const fn=(mode==="q")?"吸音板報價.png":"現場追加單.png";
+  const names={quote:"吸音板報價.png",var:"現場追加單.png",survey:"勘場確認單.png",check:"轉報檢核單.png"};
+  const fn=names[sheetKind]||"文件.png";
   toPng(cv=>cv.toBlob(b=>{
     const file=new File([b],fn,{type:"image/png"});
     if(navigator.canShare&&navigator.canShare({files:[file]}))navigator.share({files:[file],title:fn.replace(".png","")});
@@ -821,10 +931,17 @@ function share(){
 document.querySelectorAll(".mode").forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 document.getElementById("addFace").onclick=()=>{faces.push(newFace());renderFaces();sync();};
 document.getElementById("addLine").onclick=()=>{lines.push(newLine());renderLines();sync();};
-document.getElementById("btnPreview").onclick=()=>{buildSheet();openS("sheet");};
+document.getElementById("btnPreview").onclick=()=>{
+  sheetKind=(mode==="q")?"quote":(mode==="v")?"var":"survey";
+  buildSheet();openS("sheet");
+};
+document.getElementById("mkCheck").onclick=()=>{sheetKind="check";buildSheet();openS("sheet");};
 document.getElementById("closeSheet").onclick=()=>closeS("sheet");
 document.getElementById("copyBtn").onclick=e=>{navigator.clipboard.writeText(sheetText());flash(e.target,"已複製");};
-document.getElementById("btnLine").onclick=()=>{buildSheet();openS("sheet");setTimeout(share,300);};
+document.getElementById("btnLine").onclick=()=>{
+  sheetKind=(mode==="q")?"quote":(mode==="v")?"var":"survey";
+  buildSheet();openS("sheet");setTimeout(share,300);
+};
 document.getElementById("shareBtn2").onclick=share;
 document.getElementById("btnQr").onclick=()=>{
   const box=document.getElementById("qrBox");box.innerHTML="";
@@ -843,11 +960,15 @@ document.getElementById("reset").onclick=()=>{
     EXC.forEach((t,i)=>excOn[i]=true);
     document.getElementById("excNote").value="";
     renderFaces();bindItems("extras",EX,exOn,ex);bindItems("proj",PJ,pjOn,pj);renderDisp();renderExc();
-  }else{
+  }else if(mode==="v"){
     lines=[];REASON.forEach((t,i)=>reasonOn[i]=false);
     ["whoName","vNote"].forEach(k=>document.getElementById(k).value="");
     document.getElementById("vNo").value=makeNo();
     renderReasons();renderLines();
+  }else{
+    SURV.forEach(f=>srv[f.k]="");
+    document.getElementById("srvMemo").value="";
+    renderSurvey();
   }
   sync();
 };
@@ -856,7 +977,7 @@ document.getElementById("reset").onclick=()=>{
 document.getElementById("vNo").value=makeNo();
 faces.push(newFace());
 renderFaces();bindItems("extras",EX,exOn,ex);bindItems("proj",PJ,pjOn,pj);
-renderDisp();renderExc();renderReasons();renderPicks();renderLines();sync();
+renderDisp();renderExc();renderReasons();renderPicks();renderLines();renderSurvey();sync();
 </script>
 </body>
 </html>
