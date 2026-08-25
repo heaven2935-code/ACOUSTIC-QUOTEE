@@ -246,7 +246,14 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
 
 /* ---------- 不含項目 ---------- */
 .excs{flex-wrap:wrap;gap:6px}
-.excs .tog{flex:0 0 calc(50% - 3px);padding:10px 4px}
+.excs .tog{flex:0 0 calc(50% - 3px);padding:11px 6px 11px 24px;text-align:left;
+  background:var(--card);border-color:var(--hair);color:var(--mute);line-height:1.35;position:relative}
+.excs .tog::before{display:none}
+.excs .tog::after{content:"";position:absolute;left:9px;top:50%;transform:translateY(-50%);
+  width:9px;height:9px;border:1px solid #c9c1b3;border-radius:1px;background:#fff}
+.excs .tog.on{background:#fff;border-color:#cfc6b8;color:var(--body)}
+.excs .tog.on::after{background:var(--mute);border-color:var(--mute)}
+.excs .tog:not(.on){text-decoration:line-through;opacity:.55}
 .exc-note{margin-top:8px}
 .q .excl{margin-top:14px;padding:11px 13px;background:#fbf7f4;border-left:3px solid var(--clay);
   font-size:11.5px;line-height:1.8;color:var(--body)}
@@ -272,6 +279,12 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
 .q .sign2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
 .q .sign2 div{border-top:1px solid var(--hair);padding-top:8px;font-size:11.5px;color:var(--mute);
   letter-spacing:.12em;min-height:56px}
+/* 轉報檢核單 */
+.q table.chk td{padding:9px 4px;white-space:nowrap}
+.q table.chk td:first-child{white-space:normal}
+.q table.chk td.ck{font-size:11px;color:var(--body);letter-spacing:.01em;text-align:right}
+.q table.chk td.ck.inc{color:var(--green);font-weight:500;font-size:12.5px}
+.q table.chk td.ck.na{color:var(--mute);font-size:12.5px}
 </style>
 </head>
 <body>
@@ -304,7 +317,7 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
       <div class="lab"><b>施工面積與計費標準</b><i></i><s>Area · Rate</s></div>
       <div id="faces"></div>
       <button class="addrow" id="addFace">＋ 新增施工面</button>
-      <p class="hint">壁面 60／才、天花 100／才。跨板對花 +12／才；高 3M 以上單價 ×1.2；無排版圖 +500／面。每面未滿 20 才以 20 才計，才數無條件進位。</p>
+      <p class="hint">壁面 50／才、天花 100／才。跨板對花 +12／才；高 3M 以上單價 ×1.2；無排版圖 +500／面。每面未滿 20 才以 20 才計，才數無條件進位。</p>
       <div class="sum"><span>合計才數</span><b class="num" id="totChai">0<em>才</em></b></div>
     </section>
 
@@ -327,11 +340,31 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
     </section>
 
     <section>
+      <div class="lab"><b>現場保護</b><i></i><s>Protection</s></div>
+      <div class="items" id="prot"></div>
+      <div class="sum"><span>保護小計</span><b class="num" id="sumProt">0<em>元</em></b></div>
+    </section>
+
+    <section>
+      <div class="lab"><b>跨縣市施工</b><i></i><s>Travel</s></div>
+      <div class="items" id="travel"></div>
+      <div class="sum"><span>津貼小計</span><b class="num" id="sumTravel">0<em>元</em></b></div>
+    </section>
+
+    <section>
+      <div class="lab"><b>稅金</b><i></i><s>Tax</s></div>
+      <div class="chips" id="taxSel">
+        <button class="chip on" data-t="none"><strong>未稅</strong><small>預設</small></button>
+        <button class="chip" data-t="add5"><strong>外加 5%</strong><small>開立發票</small></button>
+      </div>
+    </section>
+
+    <section>
       <div class="lab"><b>不含項目</b><i></i><s>Exclusions</s></div>
       <div class="togs excs" id="excs"></div>
       <input class="exc-note" type="text" id="excNote" placeholder="其他不含項目（自行補充）">
-      <button class="addrow" id="mkCheck" style="margin-top:10px">產生轉報檢核單（給合富對業主用）</button>
-      <p class="hint">選取者會列印於報價單，明確排除承攬範圍。若該項本次確實包含，請取消選取。檢核單不帶金額，供合富向業主報價時逐項確認負責方，避免兩邊都漏算。</p>
+      <div class="modes" style="margin:12px 0 0"><button class="mode" id="mkCheck">產生轉報檢核單</button></div>
+      <p class="hint">打勾者列印於報價單的「本報價不含」。若該項本次確實由本方施作，取消勾選即會劃掉、不列入。檢核單不帶金額，供合富向業主報價時逐項確認負責方，避免兩邊都漏算。</p>
     </section>
 
     <section>
@@ -434,9 +467,10 @@ footer{padding:8px 0 20px;text-align:center;font-size:11px;color:#b0a89a;letter-
 /* ==========================================================
    計價標準　調價只改這一段，報價與追加共用
    ========================================================== */
-const R={wall:60,ceil:100,match:12,high:1.20,noplan:500,
+const R={wall:50,ceil:100,match:12,high:1.20,noplan:500,
  minChai:20,minJob:8000,recv:3500,halfDay:1800,fullDay:3000,
- clearChai:7,clearTrip:1500,chaiPerTrip:400,stop:3000};
+ clearChai:7,clearTrip:1500,chaiPerTrip:400,stop:3000,
+ travelRate:500,travelPct:.5,stay:600,tax:.05};
 
 const EX=[
  {k:"sw",   n:"開插座／開關孔", u:"孔", p:150},
@@ -447,8 +481,14 @@ const EX=[
  {k:"cut",  n:"修改裁切",       u:"片", p:300}
 ];
 const PJ=[
- {k:"recv",  n:"接料工",   d:"指定時間地點接應貨運、點收、協調", u:"趟", p:R.recv},
- {k:"remote",n:"遠程津貼", d:"跨縣市施工，比照 SPC 標準",       u:"元", p:1, free:true}
+ {k:"recv",n:"接料工",d:"指定時間地點接應貨運、點收、協調",u:"趟",p:R.recv}
+];
+/* 現場保護 */
+const PROT=[
+ {k:"pp",  n:"PP 地面保護",              d:"PP 瓦楞板鋪設",        u:"坪", p:200},
+ {k:"ppw", n:"PP ＋ 1.8mm 夾板　標準地坪保護", d:"重機具或長工期適用", u:"坪", p:500},
+ {k:"lift",n:"電梯保護",                 d:"轎廂內壁、地坪、門框",  u:"台", p:6000},
+ {k:"dust",n:"防塵膜隔離",               d:"施工區與非施工區阻隔",  u:"處", p:1800}
 ];
 /* 現場工時項目：僅出現在追加單，報價階段不預列 */
 const SITE=[
@@ -477,6 +517,7 @@ const SURV=[
 const PICKG=[
  {g:"面積", items:[{n:"壁面吸音板",u:"才",p:R.wall},{n:"天花吸音板",u:"才",p:R.ceil}]},
  {g:"加工", items:EX.map(e=>({n:e.n,u:e.u,p:e.p})).concat([{n:"接料工",u:"趟",p:R.recv}])},
+ {g:"現場保護", items:PROT.map(e=>({n:e.n,u:e.u,p:e.p}))},
  {g:"現場工時", items:SITE}
 ];
 const PICK=PICKG.reduce((a,g)=>a.concat(g.items),[]);
@@ -492,6 +533,9 @@ let faces=[],seq=0,lines=[],lseq=0;
 const srv={};SURV.forEach(f=>srv[f.k]="");
 const ex={},exOn={};EX.forEach(e=>{ex[e.k]=1;exOn[e.k]=false;});
 const pj={},pjOn={};PJ.forEach(e=>{pj[e.k]=e.free?0:1;pjOn[e.k]=false;});
+const prot={},protOn={};PROT.forEach(e=>{prot[e.k]=1;protOn[e.k]=false;});
+const tv={remOn:false,hours:1,people:2,trips:2,stayOn:false,sPeople:2,sDays:1,fuelOn:false,fuel:0};
+let tax="none";
 const excOn=EXC.map(()=>true);
 const reasonOn=REASON.map(()=>false);
 const disp={on:true,trips:0,manual:false};
@@ -522,9 +566,13 @@ const varTotal=()=>lines.reduce((s,l)=>s+l.p*l.q,0);
 function summary(){
   const rows=faces.map(f=>({f,c:calc(f)}));
   const area=rows.reduce((s,r)=>s+r.c.total,0),x=exSum(),p=pjSum(),d=dispSum();
-  const sub=area+x+p+d;
+  const pr=protSum(),tr=travelSum();
+  const sub=area+x+p+d+pr+tr;
   const makeup=(sub>0&&sub<R.minJob)?R.minJob-sub:0;
-  return{rows,area,extra:x,proj:p,disp:d,chai:totChai(),trips:trips(),sub,makeup,grand:sub+makeup};
+  const net=sub+makeup;
+  const taxAmt=(tax==="add5"&&net>0)?Math.round(net*R.tax):0;
+  return{rows,area,extra:x,proj:p,disp:d,prot:pr,travel:tr,
+    chai:totChai(),trips:trips(),sub,makeup,net,taxAmt,grand:net+taxAmt};
 }
 
 /* ---------- 施工面 ---------- */
@@ -625,6 +673,50 @@ function renderSurvey(){
 }
 const srvDone=()=>SURV.filter(f=>srv[f.k]).length;
 
+const protSum=()=>PROT.reduce((s,e)=>s+(protOn[e.k]?(+prot[e.k]||0)*e.p:0),0);
+const remoteAmt=()=>tv.remOn?(+tv.hours||0)*R.travelRate*R.travelPct*(+tv.people||0)*(+tv.trips||0):0;
+const stayAmt=()=>tv.stayOn?R.stay*(+tv.sPeople||0)*(+tv.sDays||0):0;
+const fuelAmt=()=>tv.fuelOn?(+tv.fuel||0):0;
+const travelSum=()=>remoteAmt()+stayAmt()+fuelAmt();
+
+function fRow(label,sub,key,val,unit){
+  return '<div class="f"><label>'+label+(sub?'<small>'+sub+'</small>':'')+'</label>'+
+   '<div class="in"><input class="n" data-tv="'+key+'" type="number" inputmode="decimal" value="'+val+'"><u>'+unit+'</u></div></div>';
+}
+function renderTravel(){
+  const root=document.getElementById("travel");
+  root.innerHTML=
+  '<div class="item'+(tv.remOn?" on":"")+'" data-t="remOn"><div class="hd"><div class="cb"></div>'+
+   '<div class="nm"><strong>遠程津貼</strong><small>單程時數 × 500 × 50% × 人數 × 趟數</small></div>'+
+   '<div class="rate">500<em>元／時</em></div><div class="amt" id="amtRem"></div></div>'+
+   '<div class="bd">'+fRow("單程時數","","hours",tv.hours,"時")+
+   fRow("人數","","people",tv.people,"人")+fRow("趟數","來回計 2 趟","trips",tv.trips,"趟")+'</div></div>'+
+
+  '<div class="item'+(tv.stayOn?" on":"")+'" data-t="stayOn"><div class="hd"><div class="cb"></div>'+
+   '<div class="nm"><strong>外宿生活津貼</strong><small>600／人／日含餐；房費由發包方安排負擔</small></div>'+
+   '<div class="rate">600<em>元／人日</em></div><div class="amt" id="amtStay"></div></div>'+
+   '<div class="bd">'+fRow("人數","","sPeople",tv.sPeople,"人")+
+   fRow("日數","","sDays",tv.sDays,"日")+'</div></div>'+
+
+  '<div class="item'+(tv.fuelOn?" on":"")+'" data-t="fuelOn"><div class="hd"><div class="cb"></div>'+
+   '<div class="nm"><strong>油資・過路費・停車費</strong><small>依實際發生列計</small></div>'+
+   '<div class="rate">一式<em>實報</em></div><div class="amt" id="amtFuel"></div></div>'+
+   '<div class="bd">'+fRow("金額","","fuel",tv.fuel,"元")+'</div></div>';
+
+  root.querySelectorAll(".item").forEach(el=>{
+    const k=el.dataset.t;
+    el.querySelector(".hd").onclick=()=>{tv[k]=!tv[k];el.classList.toggle("on",tv[k]);sync();};
+  });
+  root.querySelectorAll("[data-tv]").forEach(i=>i.oninput=e=>{
+    tv[e.target.dataset.tv]=Math.max(0,+e.target.value||0);sync();});
+}
+function renderTax(){
+  document.querySelectorAll("#taxSel .chip").forEach(b=>b.onclick=()=>{
+    tax=b.dataset.t;
+    document.querySelectorAll("#taxSel .chip").forEach(x=>x.classList.toggle("on",x.dataset.t===tax));
+    sync();});
+}
+
 function renderReasons(){
   const r=document.getElementById("reasons");
   r.innerHTML=REASON.map((t,i)=>'<button class="tog'+(reasonOn[i]?" on":"")+'" data-i="'+i+'">'+t+'</button>').join("");
@@ -675,7 +767,12 @@ function sync(){
   const s=summary();
   document.getElementById("totChai").innerHTML=s.chai+"<em>才</em>";
   document.getElementById("sumExtra").innerHTML=nf0(s.extra)+"<em>元</em>";
-  paintItems("extras",EX,exOn,ex);paintItems("proj",PJ,pjOn,pj);
+  paintItems("extras",EX,exOn,ex);paintItems("proj",PJ,pjOn,pj);paintItems("prot",PROT,protOn,prot);
+  document.getElementById("sumProt").innerHTML=nf0(s.prot)+"<em>元</em>";
+  document.getElementById("sumTravel").innerHTML=nf0(s.travel)+"<em>元</em>";
+  const ar=document.getElementById("amtRem");if(ar)ar.textContent=money(remoteAmt());
+  const as=document.getElementById("amtStay");if(as)as.textContent=money(stayAmt());
+  const af=document.getElementById("amtFuel");if(af)af.textContent=money(fuelAmt());
   const da=document.querySelector("#disp .amt");if(da)da.textContent=money(s.disp);
   const ti=document.querySelector("#disp .t");if(ti&&!disp.manual)ti.value=s.trips;
 
@@ -686,10 +783,16 @@ function sync(){
     if(s.area)h+='<div class="ln"><span>施工面積<small>'+s.chai+' 才／'+s.rows.length+' 面</small></span><b>'+money(s.area)+'</b></div>';
     if(s.extra)h+='<div class="ln"><span>加工項目</span><b>'+money(s.extra)+'</b></div>';
     if(s.proj)h+='<div class="ln"><span>專案工項</span><b>'+money(s.proj)+'</b></div>';
+    if(s.prot)h+='<div class="ln"><span>現場保護</span><b>'+money(s.prot)+'</b></div>';
+    if(s.travel)h+='<div class="ln"><span>跨縣市津貼</span><b>'+money(s.travel)+'</b></div>';
     if(s.disp)h+='<div class="ln"><span>清運<small>'+s.chai+'才×7＋'+s.trips+'趟×1,500</small></span><b>'+money(s.disp)+'</b></div>';
     h+='<div class="ln sub"><span>小計</span><b>'+money(s.sub)+'</b></div>';
     if(s.makeup)h+='<div class="ln warn"><span>未達每案最低出工 '+money(R.minJob)+'，補足差額</span><b>'+money(s.makeup)+'</b></div>';
-    h+='<div class="ln tot"><span>代工費（未稅）</span><b>'+money(s.grand)+'</b></div>';
+    if(s.taxAmt){
+      h+='<div class="ln sub"><span>未稅金額</span><b>'+money(s.net)+'</b></div>';
+      h+='<div class="ln"><span>營業稅 5%</span><b>'+money(s.taxAmt)+'</b></div>';
+    }
+    h+='<div class="ln tot"><span>'+(s.taxAmt?"代工費（含稅）":"代工費（未稅）")+'</span><b>'+money(s.grand)+'</b></div>';
     res.innerHTML=h;
   }
   const vt=varTotal(),vres=document.getElementById("vres");
@@ -702,6 +805,7 @@ function sync(){
   }
   if(mode==="q"){
     document.getElementById("barCur").style.display="";
+    document.getElementById("barL").textContent=s.taxAmt?"代工費（含稅）":"代工費（未稅）";
     document.getElementById("barV").textContent=nf0(s.grand);
     document.getElementById("barN").textContent=
       s.grand===0?"請輸入尺寸":(s.makeup?"已補至最低出工 "+money(R.minJob):s.chai+" 才　"+s.rows.length+" 面");
@@ -758,20 +862,22 @@ function buildSurveySheet(){
 function buildCheckSheet(){
   const nm=document.getElementById("pjName").value.trim()||"—";
   const ad=document.getElementById("pjAddr").value.trim()||"—";
-  const opt="□ 業主自理　□ 貴司發包　□ 需本方另行報價";
+  const opt="□ 無此項　　□ 業主自理　　□ 需本方另行報價";
+  const anyProt=PROT.some(e=>protOn[e.k]&&prot[e.k]>0);
+  const row=(t,v)=>'<tr><td>'+t+'</td><td class="ck">'+v+'</td></tr>';
+  const done=t=>'<tr><td>'+t+'</td><td class="ck inc">已含本方報價</td></tr>';
   let h='<div class="h"><h2 class="lock"><span class="tt">轉報檢核單<i class="sep"></i><em>項目確認</em></span></h2>'+
    '<div class="rule"></div><div class="sign">三川工方</div>'+
    '<span class="en">Scope Checklist for Client Quotation</span></div>'+
    '<div class="meta"><span>案件</span><b>'+nm+'</b><span>地址</span><b>'+ad+'</b><span>日期</span><b>'+today()+'</b></div>'+
-   '<div class="sec">項目與負責方</div><table>'+
-   '<tr><td>聚酯纖維吸音板施工</td><td class="r" style="color:var(--green);font-size:12.5px">三川工方（已含本報價）</td></tr>';
-  excList().forEach(t=>{h+='<tr><td>'+t+'</td><td class="r" style="font-size:11.5px;color:var(--body)">'+opt+'</td></tr>';});
-  h+='<tr><td>3M 以上搭架</td><td class="r" style="font-size:11.5px;color:var(--body)">'+opt+'</td></tr>'+
-   '<tr><td>餘料清運</td><td class="r" style="font-size:12.5px;color:var(--ink)">'+(disp.on?"已含本方報價":"□ 業主自理　□ 貴司處理")+'</td></tr>'+
-   '<tr><td>現場保護（電梯、地坪、公共區）</td><td class="r" style="font-size:11.5px;color:var(--body)">'+opt+'</td></tr></table>'+
-   '<div class="warn2"><b>用途說明</b><br>'+
+   '<div class="sec">項目與負責方</div><table class="chk">'+
+   done("聚酯纖維吸音板施工");
+  excList().forEach(t=>{h+=row(t,opt);});
+  h+=anyProt?done("保護工程"):row("保護工程",opt);
+  h+=disp.on?done("餘料清運"):row("餘料清運","□ 無此項　　□ 業主自理　　□ 貴司處理");
+  h+='</table><div class="warn2"><b>用途說明</b><br>'+
    '一、本表不含金額，供貴司向業主報價時逐項核對，避免項目遺漏。<br>'+
-   '二、各項負責方確認後，如需本方施作，將另行報價。<br>'+
+   '二、勾選「無此項」表示本案場確認無此需求；其餘各項確認負責方後，如需本方施作將另行報價。<br>'+
    '三、未列於本表且圖面未標示之項目，發現時以現場追加單另行確認。</div>';
   return h;
 }
@@ -783,7 +889,7 @@ function buildQuoteSheet(){
   let h='<div class="h"><h2 class="lock"><span class="tt">聚酯纖維吸音板<i class="sep"></i><em>代工報價單</em></span></h2>'+
    '<div class="rule"></div><div class="sign">三川工方</div>'+
    '<span class="en">Polyester Acoustic Panel · Contract Labour Quotation</span></div>'+
-   '<div class="meta"><span>案件</span><b>'+nm+'</b><span>地址</span><b>'+ad+'</b><span>日期</span><b>'+today()+'</b></div>';
+   '<div class="meta"><span>案件</span><b>'+nm+'</b><span>地址</span><b>'+ad+'</b><span>日期</span><b>'+today()+'</b><span>稅別</span><b>'+(tax==="add5"?"外加 5% 營業稅":"未稅")+'</b></div>';
   if(s.rows.length){
     h+='<div class="sec">施工面積</div><table>';
     s.rows.forEach(function(r){
@@ -812,9 +918,26 @@ function buildQuoteSheet(){
      '<tr><td>分類打包及合法處理</td><td class="r">'+s.chai+' 才 × '+R.clearChai+'</td><td class="amt">'+money(s.chai*R.clearChai)+'</td></tr>'+
      '<tr><td>運離現場</td><td class="r">'+s.trips+' 趟 × 1,500</td><td class="amt">'+money(s.trips*R.clearTrip)+'</td></tr></table>';
   }
+  const prl=PROT.filter(e=>protOn[e.k]&&prot[e.k]>0);
+  if(prl.length){
+    h+='<div class="sec">現場保護</div><table>';
+    prl.forEach(e=>h+='<tr><td>'+e.n+'</td><td class="r">'+prot[e.k]+' '+e.u+' × '+nf0(e.p)+'</td><td class="amt">'+money(prot[e.k]*e.p)+'</td></tr>');
+    h+='<tr class="sub"><td colspan="2">保護小計</td><td class="amt">'+money(s.prot)+'</td></tr></table>';
+  }
+  if(s.travel){
+    h+='<div class="sec">跨縣市施工</div><table>';
+    if(remoteAmt())h+='<tr><td>遠程津貼</td><td class="r">'+tv.hours+'時 × 500 × 50% × '+tv.people+'人 × '+tv.trips+'趟</td><td class="amt">'+money(remoteAmt())+'</td></tr>';
+    if(stayAmt())h+='<tr><td>外宿生活津貼<div class="d">含餐，房費由發包單位安排負擔</div></td><td class="r">'+tv.sPeople+'人 × '+tv.sDays+'日 × 600</td><td class="amt">'+money(stayAmt())+'</td></tr>';
+    if(fuelAmt())h+='<tr><td>油資・過路費・停車費</td><td class="r">一式</td><td class="amt">'+money(fuelAmt())+'</td></tr>';
+    h+='</table>';
+  }
   h+='<table style="margin-top:14px">';
   if(s.makeup)h+='<tr><td colspan="2">補足每案最低出工 '+money(R.minJob)+'</td><td class="amt">'+money(s.makeup)+'</td></tr>';
-  h+='<tr class="tot"><td colspan="2">代工費（未稅）</td><td class="amt">'+money(s.grand)+'</td></tr></table>';
+  if(s.taxAmt){
+    h+='<tr class="sub"><td colspan="2">未稅金額</td><td class="amt">'+money(s.net)+'</td></tr>';
+    h+='<tr><td colspan="2">營業稅 5%</td><td class="amt">'+money(s.taxAmt)+'</td></tr>';
+  }
+  h+='<tr class="tot"><td colspan="2">'+(s.taxAmt?"代工費（含稅）":"代工費（未稅）")+'</td><td class="amt">'+money(s.grand)+'</td></tr></table>';
   const e2=excList();
   if(e2.length)h+='<div class="excl"><b>本報價不含</b><br>'+e2.join("、")+
    '。<br>上列項目如需施作，須另行報價；未經確認前不予施作。</div>';
@@ -877,9 +1000,15 @@ function sheetText(){
     s.rows.forEach(r=>{t+=fname(r.f)+"　"+r.c.chai+"才 × "+nf0(r.c.rate)+" ＝ "+money(r.c.total)+"\n";});
     EX.filter(e=>exOn[e.k]&&ex[e.k]>0).forEach(e=>{t+=e.n+"　"+ex[e.k]+e.u+" ＝ "+money(ex[e.k]*e.p)+"\n";});
     PJ.filter(e=>pjOn[e.k]&&pj[e.k]>0).forEach(e=>{t+=e.n+" ＝ "+money(pj[e.k]*e.p)+"\n";});
+    PROT.filter(e=>protOn[e.k]&&prot[e.k]>0).forEach(e=>{t+=e.n+"　"+prot[e.k]+e.u+" ＝ "+money(prot[e.k]*e.p)+"\n";});
+    if(remoteAmt())t+="遠程津貼 ＝ "+money(remoteAmt())+"\n";
+    if(stayAmt())t+="外宿生活津貼 ＝ "+money(stayAmt())+"\n";
+    if(fuelAmt())t+="油資過路停車 ＝ "+money(fuelAmt())+"\n";
     if(s.disp)t+="清運　"+s.chai+"才×7＋"+s.trips+"趟×1,500 ＝ "+money(s.disp)+"\n";
     if(s.makeup)t+="補足最低出工 ＝ "+money(s.makeup)+"\n";
-    t+="—————\n代工費（未稅）"+money(s.grand);
+    t+="—————\n";
+    if(s.taxAmt){t+="未稅 "+money(s.net)+"\n營業稅 5% "+money(s.taxAmt)+"\n代工費（含稅）"+money(s.grand);}
+    else t+="代工費（未稅）"+money(s.grand);
     const e2=excList();
     if(e2.length)t+="\n\n【本報價不含】"+e2.join("、")+"。上列如需施作須另行報價，未經確認前不予施作。";
     return t;
@@ -895,11 +1024,11 @@ function sheetText(){
   if(sheetKind==="check"){
     let t="【轉報檢核單】三川工方\n案件："+nm+"\n日期："+today()+"\n供貴司向業主報價時逐項核對\n—————\n";
     t+="吸音板施工：三川工方（已含本報價）\n";
-    excList().forEach(x=>{t+=x+"：業主自理／貴司發包／需本方另行報價（請確認）\n";});
-    t+="3M 以上搭架：請確認\n";
-    t+="餘料清運："+(disp.on?"已含本方報價":"業主自理／貴司處理（請確認）")+"\n";
-    t+="現場保護（電梯、地坪）：請確認\n";
-    t+="—————\n※ 本表不帶金額；各項如需本方施作將另行報價。未列項目發現時以現場追加單確認。";
+    const o="無此項／業主自理／需本方另行報價（請擇一）";
+    excList().forEach(x=>{t+=x+"："+o+"\n";});
+    t+="保護工程："+(PROT.some(e=>protOn[e.k]&&prot[e.k]>0)?"已含本方報價":o)+"\n";
+    t+="餘料清運："+(disp.on?"已含本方報價":"無此項／業主自理／貴司處理（請擇一）")+"\n";
+    t+="—————\n※ 本表不帶金額。勾選「無此項」表示本案場無此需求；其餘如需本方施作將另行報價。未列項目發現時以現場追加單確認。";
     return t;
   }
   const no=document.getElementById("vNo").value.trim()||"—";
@@ -957,9 +1086,12 @@ document.getElementById("reset").onclick=()=>{
     EX.forEach(e=>{ex[e.k]=1;exOn[e.k]=false;});
     PJ.forEach(e=>{pj[e.k]=e.free?0:1;pjOn[e.k]=false;});
     disp.on=true;disp.manual=false;disp.trips=0;
+    PROT.forEach(e=>{prot[e.k]=1;protOn[e.k]=false;});
+    Object.assign(tv,{remOn:false,hours:1,people:2,trips:2,stayOn:false,sPeople:2,sDays:1,fuelOn:false,fuel:0});
+    tax="none";document.querySelectorAll('#taxSel .chip').forEach(x=>x.classList.toggle('on',x.dataset.t==='none'));
     EXC.forEach((t,i)=>excOn[i]=true);
     document.getElementById("excNote").value="";
-    renderFaces();bindItems("extras",EX,exOn,ex);bindItems("proj",PJ,pjOn,pj);renderDisp();renderExc();
+    renderFaces();bindItems("extras",EX,exOn,ex);bindItems("proj",PJ,pjOn,pj);bindItems("prot",PROT,protOn,prot);renderTravel();renderDisp();renderExc();
   }else if(mode==="v"){
     lines=[];REASON.forEach((t,i)=>reasonOn[i]=false);
     ["whoName","vNote"].forEach(k=>document.getElementById(k).value="");
@@ -977,7 +1109,7 @@ document.getElementById("reset").onclick=()=>{
 document.getElementById("vNo").value=makeNo();
 faces.push(newFace());
 renderFaces();bindItems("extras",EX,exOn,ex);bindItems("proj",PJ,pjOn,pj);
-renderDisp();renderExc();renderReasons();renderPicks();renderLines();renderSurvey();sync();
+bindItems("prot",PROT,protOn,prot);renderTravel();renderTax();renderDisp();renderExc();renderReasons();renderPicks();renderLines();renderSurvey();sync();
 </script>
 </body>
 </html>
